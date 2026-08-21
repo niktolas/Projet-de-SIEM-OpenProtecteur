@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.routes.alerts import router as alerts_router
 from app.api.routes.events import router as events_router
 from app.api.routes.health import router as health_router
 from app.core.config import settings
@@ -19,6 +20,7 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(events_router)
+app.include_router(alerts_router)
 
 
 @app.exception_handler(SQLAlchemyError)

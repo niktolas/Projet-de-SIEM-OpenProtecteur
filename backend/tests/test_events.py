@@ -155,3 +155,113 @@ def test_delete_security_event(client):
     )
 
     assert get_response.status_code == 404
+
+def test_create_brute_force_alert_after_five_failures(client):
+    for number in range(5):
+        response = client.post(
+            "/events",
+            json={
+                "source": "linux_auth",
+                "hostname": "srv-linux-01",
+                "event_type": "authentication_failure",
+                "username": "admin",
+                "source_ip": "192.168.1.42",
+                "severity": "medium",
+                "message": f"Failed authentication {number}",
+            },
+        )
+
+        assert response.status_code == 201
+
+    alerts_response = client.get("/alerts")
+
+    assert alerts_response.status_code == 200
+
+    body = alerts_response.json()
+
+    assert body["total"] == 1
+    assert body["returned"] == 1
+    assert body["items"][0]["rule_name"] == (
+        "authentication_brute_force"
+    )
+    assert body["items"][0]["source_ip"] == "192.168.1.42"
+    assert body["items"][0]["username"] == "admin"
+    assert body["items"][0]["event_count"] == 5
+    assert body["items"][0]["severity"] == "high"
+    assert body["items"][0]["status"] == "open"
+
+
+def test_do_not_create_alert_below_threshold(client):
+    for number in range(4):
+        client.post(
+            "/events",
+            json={
+                "source": "linux_auth",
+                "hostname": "srv-linux-01",
+                "event_type": "authentication_failure",
+                "username": "admin",
+                "source_ip": "192.168.1.42",
+                "severity": "medium",
+                "message": f"Failed authentication {number}",
+            },
+        )
+
+    alerts_response = client.get("/alerts")
+
+    assert alerts_response.status_code == 200
+    assert alerts_response.json()["total"] == 0
+
+
+def test_do_not_duplicate_recent_brute_force_alert(client):
+    for number in range(6):
+        response = client.post(
+            "/events",
+            json={
+                "source": "linux_auth",
+                "hostname": "srv-linux-01",
+                "event_type": "authentication_failure",
+                "username": "admin",
+                "source_ip": "192.168.1.42",
+                "severity": "medium",
+                "message": f"Failed authentication {number}",
+            },
+        )
+
+        assert response.status_code == 201
+
+    alerts_response = client.get("/alerts")
+
+    assert alerts_response.status_code == 200
+    assert alerts_response.json()["total"] == 1
+
+
+def test_different_source_ips_are_not_correlated(client):
+    for number in range(4):
+        client.post(
+            "/events",
+            json={
+                "source": "linux_auth",
+                "hostname": "srv-linux-01",
+                "event_type": "authentication_failure",
+                "username": "admin",
+                "source_ip": "192.168.1.42",
+                "severity": "medium",
+            },
+        )
+
+    client.post(
+        "/events",
+        json={
+            "source": "linux_auth",
+            "hostname": "srv-linux-01",
+            "event_type": "authentication_failure",
+            "username": "admin",
+            "source_ip": "192.168.1.50",
+            "severity": "medium",
+        },
+    )
+
+    alerts_response = client.get("/alerts")
+
+    assert alerts_response.status_code == 200
+    assert alerts_response.json()["total"] == 0

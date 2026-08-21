@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.security_event import SecurityEvent
 
+from datetime import datetime
 
 class SecurityEventRepository:
     def create(
@@ -73,6 +74,35 @@ class SecurityEventRepository:
         events = db.scalars(events_statement).all()
 
         return total, events
+
+    def count_authentication_failures(
+        self,
+        db: Session,
+        *,
+        source_ip: str,
+        username: str | None,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> int:
+        filters = [
+            SecurityEvent.event_type == "authentication_failure",
+            SecurityEvent.source_ip == source_ip,
+            SecurityEvent.timestamp >= window_start,
+            SecurityEvent.timestamp <= window_end,
+        ]
+
+        if username is None:
+            filters.append(SecurityEvent.username.is_(None))
+        else:
+            filters.append(SecurityEvent.username == username)
+
+        statement = (
+            select(func.count())
+            .select_from(SecurityEvent)
+            .where(*filters)
+        )
+
+        return db.scalar(statement) or 0
 
     def delete(
         self,

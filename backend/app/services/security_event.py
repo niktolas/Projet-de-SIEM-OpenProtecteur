@@ -10,6 +10,7 @@ from app.schemas.security_event import (
     SecurityEventCreate,
     SecurityEventPage,
 )
+from app.services.detection import DetectionService
 
 
 class SecurityEventNotFoundError(Exception):
@@ -20,8 +21,14 @@ class SecurityEventService:
     def __init__(
         self,
         repository: SecurityEventRepository | None = None,
+        detection_service: DetectionService | None = None,
     ) -> None:
         self.repository = repository or SecurityEventRepository()
+        self.detection_service = (
+            detection_service or DetectionService(
+                event_repository=self.repository,
+            )
+        )
 
     def create_event(
         self,
@@ -48,6 +55,12 @@ class SecurityEventService:
                 db,
                 security_event,
             )
+
+            self.detection_service.analyze_event(
+                db,
+                created_event,
+            )
+
             db.commit()
             db.refresh(created_event)
 
