@@ -5,7 +5,6 @@ from ipaddress import IPv4Address, IPv6Address
 
 from pydantic import BaseModel, ConfigDict, Field
 
-#Le modele SQLAlchemy represente les donnees dans PostgreSQL. Les schemas Pydantic representent les donnees acceptees et retournees par l’API.
 
 class SeverityLevel(str, Enum):
     informational = "informational"
@@ -44,7 +43,7 @@ class SecurityEventCreate(BaseModel):
 
     source_ip: IPv4Address | IPv6Address | None = Field(
         default=None,
-        examples=["192.168.5.67"],
+        examples=["192.168.1.42"],
     )
 
     severity: SeverityLevel = SeverityLevel.informational
@@ -69,3 +68,11 @@ class SecurityEventRead(BaseModel):
     severity: SeverityLevel
     message: str | None
     created_at: datetime
+
+
+class SecurityEventPage(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    returned: int
+    items: list[SecurityEventRead]

@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes.events import router as events_router
 from app.api.routes.health import router as health_router
@@ -17,6 +19,19 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(events_router)
+
+
+@app.exception_handler(SQLAlchemyError)
+def sqlalchemy_exception_handler(
+    request: Request,
+    exception: SQLAlchemyError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "detail": "Database operation unavailable",
+        },
+    )
 
 
 @app.get("/", tags=["Application"])

@@ -1,15 +1,25 @@
-from datetime import datetime, timezone
+import uuid
 
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import func, select
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.security_event import SecurityEvent
 from app.schemas.security_event import (
     SecurityEventCreate,
+    SecurityEventPage,
     SecurityEventRead,
     SeverityLevel,
+)
+from app.services.security_event import (
+    SecurityEventNotFoundError,
+    SecurityEventService,
 )
 
 
@@ -17,6 +27,8 @@ router = APIRouter(
     prefix="/events",
     tags=["Security events"],
 )
+
+service = SecurityEventService()
 
 
 @router.post(
@@ -27,32 +39,16 @@ router = APIRouter(
 def create_security_event(
     event_data: SecurityEventCreate,
     db: Session = Depends(get_db),
-) -> SecurityEvent:
-    security_event = SecurityEvent(
-        timestamp=event_data.timestamp or datetime.now(timezone.utc),
-        source=event_data.source,
-        hostname=event_data.hostname,
-        event_type=event_data.event_type,
-        username=event_data.username,
-        source_ip=(
-            str(event_data.source_ip)
-            if event_data.source_ip is not None
-            else None
-        ),
-        severity=event_data.severity.value,
-        message=event_data.message,
+):
+    return service.create_event(
+        db,
+        event_data,
     )
-
-    db.add(security_event)
-    db.commit()
-    db.refresh(security_event)
-
-    return security_event
 
 
 @router.get(
     "",
-    response_model=list[SecurityEventRead],
+    response_model=SecurityEventPage,
 )
 def list_security_events(
     limit: int = Query(default=50, ge=1, le=200),
@@ -62,46 +58,59 @@ def list_security_events(
     severity: SeverityLevel | None = Query(default=None),
     source_ip: str | None = Query(default=None),
     db: Session = Depends(get_db),
-) -> list:
-    statement = select(SecurityEvent)
-
-    if hostname is not None:
-        statement = statement.where(
-            SecurityEvent.hostname == hostname
-        )
-
-    if event_type is not None:
-        statement = statement.where(
-            SecurityEvent.event_type == event_type
-        )
-
-    if severity is not None:
-        statement = statement.where(
-            SecurityEvent.severity == severity.value
-        )
-
-    if source_ip is not None:
-        statement = statement.where(
-            SecurityEvent.source_ip == source_ip
-        )
-
-    statement = (
-        statement
-        .order_by(SecurityEvent.timestamp.desc())
-        .offset(offset)
-        .limit(limit)
+):
+    return service.list_events(
+        db,
+        limit=limit,
+        offset=offset,
+        hostname=hostname,
+        event_type=event_type,
+        severity=severity.value if severity is not None else None,
+        source_ip=source_ip,
     )
 
-    return list(db.scalars(statement).all())
 
-
-@router.get("/count")
-def count_security_events(
+@router.get(
+    "/{event_id}",
+    response_model=SecurityEventRead,
+)
+def get_security_event(
+    event_id: uuid.UUID,
     db: Session = Depends(get_db),
-) -> dict[str, int]:
-    statement = select(func.count()).select_from(SecurityEvent)
-    total = db.scalar(statement)
+):
+    try:
+        return service.get_event(
+            db,
+            event_id,
+        )
 
-    return {
-        "total": total or 0,
-    }
+    except SecurityEventNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Security event not found",
+        ) from exc
+
+
+@router.delete(
+    "/{event_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_security_event(
+    event_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> Response:
+    try:
+        service.delete_event(
+            db,
+            event_id,
+        )
+
+    except SecurityEventNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Security event not found",
+        ) from exc
+
+    return Response(
+        status_code=status.HTTP_204_NO_CONTENT,
+    )

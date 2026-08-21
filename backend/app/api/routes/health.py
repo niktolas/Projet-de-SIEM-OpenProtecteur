@@ -3,6 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.session import get_db
 
 
@@ -16,7 +17,7 @@ router = APIRouter(
 def health_check() -> dict[str, str]:
     return {
         "status": "healthy",
-        "application": "OpenProtecteur",
+        "application": settings.app_name,
     }
 
 

@@ -51,7 +51,6 @@ class SecurityEvent(Base):
     severity: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        default="informational",
         server_default="informational",
     )
 

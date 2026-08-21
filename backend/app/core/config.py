@@ -1,4 +1,5 @@
 from functools import lru_cache
+from urllib.parse import quote_plus
 
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,6 +18,8 @@ class Settings(BaseSettings):
     postgres_user: str
     postgres_password: str
 
+    test_postgres_db: str = "openprotecteurdb_test"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -24,14 +27,25 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    def build_database_url(self, database_name: str) -> str:
+        username = quote_plus(self.postgres_user)
+        password = quote_plus(self.postgres_password)
+
+        return (
+            f"postgresql+psycopg://{username}:{password}"
+            f"@{self.postgres_host}:{self.postgres_port}"
+            f"/{database_name}"
+        )
+
     @computed_field
     @property
     def database_url(self) -> str:
-        return (
-            f"postgresql+psycopg://{self.postgres_user}:"
-            f"{self.postgres_password}@{self.postgres_host}:"
-            f"{self.postgres_port}/{self.postgres_db}"
-        )
+        return self.build_database_url(self.postgres_db)
+
+    @computed_field
+    @property
+    def test_database_url(self) -> str:
+        return self.build_database_url(self.test_postgres_db)
 
 
 @lru_cache
