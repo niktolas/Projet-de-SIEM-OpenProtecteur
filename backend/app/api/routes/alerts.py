@@ -1,6 +1,12 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -9,8 +15,13 @@ from app.schemas.alert import (
     AlertRead,
     AlertSeverity,
     AlertStatus,
+    AlertStatusUpdate,
 )
-from app.services.alert import AlertNotFoundError, AlertService
+from app.services.alert import (
+    AlertNotFoundError,
+    AlertService,
+    InvalidAlertStatusTransitionError,
+)
 
 
 router = APIRouter(
@@ -68,4 +79,33 @@ def get_alert(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Alert not found",
+        ) from exc
+
+
+@router.patch(
+    "/{alert_id}/status",
+    response_model=AlertRead,
+)
+def update_alert_status(
+    alert_id: uuid.UUID,
+    status_update: AlertStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    try:
+        return service.update_alert_status(
+            db,
+            alert_id,
+            status_update.status,
+        )
+
+    except AlertNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found",
+        ) from exc
+
+    except InvalidAlertStatusTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Invalid alert status transition",
         ) from exc

@@ -19,6 +19,8 @@ class AlertStatus(str, Enum):
     resolved = "resolved"
     false_positive = "false_positive"
 
+class AlertStatusUpdate(BaseModel):
+    status: AlertStatus
 
 class AlertRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)

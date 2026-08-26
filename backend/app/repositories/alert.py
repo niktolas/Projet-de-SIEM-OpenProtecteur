@@ -51,6 +51,19 @@ class AlertRepository:
 
         return db.scalar(statement)
 
+    def update_status(
+        self,
+        db: Session,
+        alert: Alert,
+        status: str,
+    ) -> Alert:
+        alert.status = status
+
+        db.flush()
+        db.refresh(alert)
+
+        return alert
+
     def list_alerts(
         self,
         db: Session,
