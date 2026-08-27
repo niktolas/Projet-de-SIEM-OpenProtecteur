@@ -23,6 +23,8 @@ from app.services.alert import (
     InvalidAlertStatusTransitionError,
 )
 
+from app.api.dependencies import require_roles
+from app.models.user import User
 
 router = APIRouter(
     prefix="/alerts",
@@ -43,6 +45,9 @@ def list_alerts(
     alert_status: AlertStatus | None = Query(
         default=None,
         alias="status",
+    ),
+    current_user: User = Depends(
+        require_roles("viewer", "analyst", "admin"),
     ),
     source_ip: str | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -68,6 +73,9 @@ def list_alerts(
 def get_alert(
     alert_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_roles("viewer", "analyst", "admin"),
+    ),
 ):
     try:
         return service.get_alert(
@@ -90,6 +98,9 @@ def update_alert_status(
     alert_id: uuid.UUID,
     status_update: AlertStatusUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_roles("analyst", "admin"),
+    ),
 ):
     try:
         return service.update_alert_status(

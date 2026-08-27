@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     postgres_user: str
     postgres_password: str
 
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+
     test_postgres_db: str = "openprotecteurdb_test"
 
     model_config = SettingsConfigDict(

@@ -22,6 +22,8 @@ from app.services.security_event import (
     SecurityEventService,
 )
 
+from app.api.dependencies import require_roles
+from app.models.user import User
 
 router = APIRouter(
     prefix="/events",
@@ -39,6 +41,9 @@ service = SecurityEventService()
 def create_security_event(
     event_data: SecurityEventCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_roles("analyst", "admin"),
+    ),
 ):
     return service.create_event(
         db,
@@ -58,6 +63,9 @@ def list_security_events(
     severity: SeverityLevel | None = Query(default=None),
     source_ip: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_roles("viewer", "analyst", "admin"),
+    ),
 ):
     return service.list_events(
         db,
@@ -98,6 +106,9 @@ def get_security_event(
 def delete_security_event(
     event_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_roles("admin"),
+    ),
 ) -> Response:
     try:
         service.delete_event(
