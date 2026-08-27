@@ -1,0 +1,25 @@
+[Unit]
+Description=OpenProtecteur FastAPI backend
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=azureuser
+Group=azureuser
+
+WorkingDirectory=/home/azureuser/OpenProtecteur/backend
+EnvironmentFile=/etc/openprotecteur/backend.env
+
+ExecStart=/home/azureuser/OpenProtecteur/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
