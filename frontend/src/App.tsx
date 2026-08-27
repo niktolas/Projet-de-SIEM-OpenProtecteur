@@ -9,6 +9,8 @@ import {
   getAlerts,
   getEvents,
   updateAlertStatus,
+  ApiError,
+  getCurrentUser,
 } from "./api";
 
 import type {
@@ -18,7 +20,15 @@ import type {
   SecurityEvent,
   SecurityEventPage,
   Severity,
+  User,
 } from "./types";
+
+import LoginPage from "./LoginPage";
+
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "./auth";
 
 type View = "events" | "alerts";
 
@@ -216,6 +226,7 @@ function AlertsTable({
 function AlertDetailPanel({
   alert,
   loading,
+  canUpdate,
   updating,
   error,
   onClose,
@@ -223,6 +234,7 @@ function AlertDetailPanel({
 }: {
   alert: Alert | null;
   loading: boolean;
+  canUpdate: boolean;
   updating: boolean;
   error: string | null;
   onClose: () => void;
@@ -279,6 +291,7 @@ function AlertDetailPanel({
             <section className="alert-summary">
               <div className="summary-title">
                 <h4>{alert.title}</h4>
+
                 <SeverityBadge
                   severity={alert.severity}
                 />
@@ -318,8 +331,7 @@ function AlertDetailPanel({
                   <dt>Adresse IP source</dt>
                   <dd>
                     <code>
-                      {alert.source_ip ??
-                        "Non renseignée"}
+                      {alert.source_ip ?? "Non renseignée"}
                     </code>
                   </dd>
                 </div>
@@ -358,84 +370,92 @@ function AlertDetailPanel({
               </div>
             </section>
 
-            <section className="detail-section">
-              <h4>Actions d’investigation</h4>
+            {canUpdate ? (
+              <section className="detail-section">
+                <h4>Actions d’investigation</h4>
 
-              <div className="action-buttons">
-                {alert.status === "open" && (
-                  <button
-                    type="button"
-                    className="primary-action"
-                    disabled={updating}
-                    onClick={() =>
-                      onUpdateStatus("investigating")
-                    }
-                  >
-                    Prendre en charge
-                  </button>
-                )}
-
-                {alert.status === "investigating" && (
-                  <>
+                <div className="action-buttons">
+                  {alert.status === "open" && (
                     <button
                       type="button"
-                      className="success-action"
+                      className="primary-action"
                       disabled={updating}
                       onClick={() =>
-                        onUpdateStatus("resolved")
+                        onUpdateStatus("investigating")
                       }
                     >
-                      Résoudre
+                      Prendre en charge
                     </button>
+                  )}
 
+                  {alert.status === "investigating" && (
+                    <>
+                      <button
+                        type="button"
+                        className="success-action"
+                        disabled={updating}
+                        onClick={() =>
+                          onUpdateStatus("resolved")
+                        }
+                      >
+                        Résoudre
+                      </button>
+
+                      <button
+                        type="button"
+                        className="warning-action"
+                        disabled={updating}
+                        onClick={() =>
+                          onUpdateStatus("false_positive")
+                        }
+                      >
+                        Classer comme faux positif
+                      </button>
+
+                      <button
+                        type="button"
+                        className="secondary-action"
+                        disabled={updating}
+                        onClick={() =>
+                          onUpdateStatus("open")
+                        }
+                      >
+                        Remettre en attente
+                      </button>
+                    </>
+                  )}
+
+                  {(alert.status === "resolved" ||
+                    alert.status === "false_positive") && (
                     <button
                       type="button"
-                      className="warning-action"
+                      className="primary-action"
                       disabled={updating}
                       onClick={() =>
-                        onUpdateStatus(
-                          "false_positive",
-                        )
+                        onUpdateStatus("investigating")
                       }
                     >
-                      Classer comme faux positif
+                      Rouvrir l’investigation
                     </button>
+                  )}
+                </div>
 
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      disabled={updating}
-                      onClick={() =>
-                        onUpdateStatus("open")
-                      }
-                    >
-                      Remettre en attente
-                    </button>
-                  </>
+                {updating && (
+                  <p className="updating-message">
+                    Mise à jour du statut...
+                  </p>
                 )}
+              </section>
+            ) : (
+              <section className="detail-section">
+                <h4>Actions d’investigation</h4>
 
-                {(alert.status === "resolved" ||
-                  alert.status ===
-                    "false_positive") && (
-                  <button
-                    type="button"
-                    className="primary-action"
-                    disabled={updating}
-                    onClick={() =>
-                      onUpdateStatus("investigating")
-                    }
-                  >
-                    Rouvrir l’investigation
-                  </button>
-                )}
-              </div>
-
-              {updating && (
-                <p className="updating-message">
-                  Mise à jour du statut...
+                <p className="readonly-message">
+                  Votre rôle permet uniquement de consulter
+                  cette alerte.
                 </p>
-              )}
-            </section>
+              </section>
+            )}
 
             <footer className="drawer-footer">
               Identifiant : <code>{alert.id}</code>
@@ -447,7 +467,13 @@ function AlertDetailPanel({
   );
 }
 
-function App() {
+function SecurityDashboard({
+  currentUser,
+  onLogout,
+}: {
+  currentUser: User;
+  onLogout: () => void;
+}) {
   const [view, setView] =
     useState<View>("alerts");
 
@@ -691,10 +717,30 @@ function App() {
           </nav>
         </div>
 
-        <div className="api-status">
-          <span className="status-dot" />
-          API connectée
-        </div>
+ <div className="sidebar-footer">
+  <div className="current-user">
+    <strong>
+      {currentUser.username}
+    </strong>
+
+    <span>
+      Rôle : {currentUser.role}
+    </span>
+  </div>
+
+  <div className="api-status">
+    <span className="status-dot" />
+    API connectée
+  </div>
+
+  <button
+    type="button"
+    className="logout-button"
+    onClick={onLogout}
+  >
+    Se déconnecter
+  </button>
+ </div>
       </aside>
 
       <main>
@@ -887,6 +933,10 @@ function App() {
         <AlertDetailPanel
           alert={selectedAlert}
           loading={detailLoading}
+	  canUpdate={
+            currentUser.role === "analyst" ||
+	    currentUser.role === "admin"
+          }
           updating={statusUpdating}
           error={detailError}
           onClose={() =>
@@ -900,5 +950,82 @@ function App() {
     </div>
   );
 }
+
+
+function App() {
+  const [currentUser, setCurrentUser] =
+    useState<User | null>(null);
+
+  const [sessionLoading, setSessionLoading] =
+    useState(true);
+
+
+  async function loadAuthenticatedUser() {
+    try {
+      const response =
+        await getCurrentUser();
+
+      setCurrentUser(response.user);
+    } catch (requestError) {
+      removeAccessToken();
+      setCurrentUser(null);
+
+      if (
+        requestError instanceof ApiError &&
+        requestError.status !== 401
+      ) {
+        console.error(requestError);
+      }
+    }
+  }
+
+
+  useEffect(() => {
+    async function initializeSession() {
+      if (!getAccessToken()) {
+        setSessionLoading(false);
+        return;
+      }
+
+      await loadAuthenticatedUser();
+      setSessionLoading(false);
+    }
+
+    void initializeSession();
+  }, []);
+
+
+  function logout() {
+    removeAccessToken();
+    setCurrentUser(null);
+  }
+
+
+  if (sessionLoading) {
+    return (
+      <div className="session-loading">
+        Vérification de la session...
+      </div>
+    );
+  }
+
+
+  if (!currentUser) {
+    return (
+      <LoginPage
+        onLogin={loadAuthenticatedUser}
+      />
+    );
+  }
+
+
+  return (
+    <SecurityDashboard
+      currentUser={currentUser}
+      onLogout={logout}
+    />
+  );
+}
+
 
 export default App;

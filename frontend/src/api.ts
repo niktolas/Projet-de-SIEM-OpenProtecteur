@@ -1,10 +1,18 @@
+import {
+  getAccessToken,
+  removeAccessToken,
+} from "./auth";
+
 import type {
   Alert,
   AlertPage,
   AlertStatus,
+  CurrentUserResponse,
   SecurityEventPage,
   Severity,
+  TokenResponse,
 } from "./types";
+
 
 interface EventFilters {
   limit?: number;
@@ -15,6 +23,7 @@ interface EventFilters {
   sourceIp?: string;
 }
 
+
 interface AlertFilters {
   limit?: number;
   offset?: number;
@@ -23,53 +32,107 @@ interface AlertFilters {
   sourceIp?: string;
 }
 
-function createQuery(
-  parameters: Record<string, string | number | undefined>,
-): string {
-  const searchParameters = new URLSearchParams();
 
-  Object.entries(parameters).forEach(([key, value]) => {
-    if (value !== undefined && value !== "") {
-      searchParameters.set(key, String(value));
-    }
-  });
+export class ApiError extends Error {
+  status: number;
+
+  constructor(
+    message: string,
+    status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+
+function createQuery(
+  parameters: Record<
+    string,
+    string | number | undefined
+  >,
+): string {
+  const searchParameters =
+    new URLSearchParams();
+
+  Object.entries(parameters).forEach(
+    ([key, value]) => {
+      if (
+        value !== undefined &&
+        value !== ""
+      ) {
+        searchParameters.set(
+          key,
+          String(value),
+        );
+      }
+    },
+  );
 
   const query = searchParameters.toString();
 
   return query ? `?${query}` : "";
 }
 
+
 async function request<T>(
   url: string,
-  options?: RequestInit,
+  options: RequestInit = {},
 ): Promise<T> {
+  const token = getAccessToken();
+
+  const headers = new Headers(
+    options.headers,
+  );
+
+  headers.set(
+    "Accept",
+    "application/json",
+  );
+
+  if (options.body) {
+    headers.set(
+      "Content-Type",
+      "application/json",
+    );
+  }
+
+  if (token) {
+    headers.set(
+      "Authorization",
+      `Bearer ${token}`,
+    );
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: {
-      Accept: "application/json",
-      ...(options?.body
-        ? { "Content-Type": "application/json" }
-        : {}),
-      ...options?.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
     let detail = `Erreur API ${response.status}`;
 
     try {
-      const errorBody = (await response.json()) as {
+      const body = (await response.json()) as {
         detail?: string;
       };
 
-      if (errorBody.detail) {
-        detail = errorBody.detail;
+      if (body.detail) {
+        detail = body.detail;
       }
     } catch {
-      // La réponse ne contient pas nécessairement du JSON.
+      // Certaines réponses ne sont pas en JSON.
     }
 
-    throw new Error(detail);
+    if (response.status === 401) {
+      removeAccessToken();
+    }
+
+    throw new ApiError(
+      detail,
+      response.status,
+    );
   }
 
   if (response.status === 204) {
@@ -79,6 +142,63 @@ async function request<T>(
   return response.json() as Promise<T>;
 }
 
+
+export async function login(
+  username: string,
+  password: string,
+): Promise<TokenResponse> {
+  const form = new URLSearchParams();
+
+  form.set("username", username);
+  form.set("password", password);
+
+  const response = await fetch(
+    "/api/auth/token",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type":
+          "application/x-www-form-urlencoded",
+      },
+      body: form,
+    },
+  );
+
+  if (!response.ok) {
+    let detail =
+      "Nom d’utilisateur ou mot de passe incorrect.";
+
+    try {
+      const body = (await response.json()) as {
+        detail?: string;
+      };
+
+      if (body.detail) {
+        detail = body.detail;
+      }
+    } catch {
+      // La réponse ne contient pas de JSON.
+    }
+
+    throw new ApiError(
+      detail,
+      response.status,
+    );
+  }
+
+  return response.json() as Promise<TokenResponse>;
+}
+
+
+export function getCurrentUser():
+Promise<CurrentUserResponse> {
+  return request<CurrentUserResponse>(
+    "/api/auth/me",
+  );
+}
+
+
 export function getEvents(
   filters: EventFilters = {},
 ): Promise<SecurityEventPage> {
@@ -87,7 +207,8 @@ export function getEvents(
     offset: filters.offset ?? 0,
     hostname: filters.hostname,
     event_type: filters.eventType,
-    severity: filters.severity || undefined,
+    severity:
+      filters.severity || undefined,
     source_ip: filters.sourceIp,
   });
 
@@ -96,14 +217,17 @@ export function getEvents(
   );
 }
 
+
 export function getAlerts(
   filters: AlertFilters = {},
 ): Promise<AlertPage> {
   const query = createQuery({
     limit: filters.limit ?? 20,
     offset: filters.offset ?? 0,
-    severity: filters.severity || undefined,
-    status: filters.status || undefined,
+    severity:
+      filters.severity || undefined,
+    status:
+      filters.status || undefined,
     source_ip: filters.sourceIp,
   });
 
@@ -112,6 +236,7 @@ export function getAlerts(
   );
 }
 
+
 export function getAlert(
   alertId: string,
 ): Promise<Alert> {
@@ -119,6 +244,7 @@ export function getAlert(
     `/api/alerts/${alertId}`,
   );
 }
+
 
 export function updateAlertStatus(
   alertId: string,

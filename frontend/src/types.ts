@@ -53,3 +53,26 @@ export type SecurityEventPage =
 
 export type AlertPage =
   PaginatedResponse<Alert>;
+
+export type UserRole =
+  | "viewer"
+  | "analyst"
+  | "admin";
+
+export interface User {
+  id: string;
+  username: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+export interface CurrentUserResponse {
+  user: User;
+}
